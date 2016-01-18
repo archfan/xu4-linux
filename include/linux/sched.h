@@ -990,6 +990,10 @@ extern void wake_up_q(struct wake_q_head *head);
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 #define SD_NUMA			0x4000	/* cross-node balancing */
 
+#ifdef CONFIG_HPERF_HMP
+#define SD_HMP_BALANCE		0x8000	/* Use HMP load balancing algorithm */
+#endif
+
 #ifdef CONFIG_SCHED_SMT
 static inline int cpu_smt_flags(void)
 {
@@ -1053,6 +1057,10 @@ struct sched_domain {
 	u64 max_newidle_lb_cost;
 	unsigned long next_decay_max_lb_cost;
 
+#ifdef CONFIG_HPERF_HMP
+	struct sched_group *a15_group;
+	struct sched_group *a7_group;
+#endif
 #ifdef CONFIG_SCHEDSTATS
 	/* load_balance() stats */
 	unsigned int lb_count[CPU_MAX_IDLE_TYPES];
@@ -1247,6 +1255,15 @@ struct sched_entity {
 	struct list_head	group_node;
 	unsigned int		on_rq;
 
+#ifdef CONFIG_HPERF_HMP
+	long			druntime;
+
+	/* Time of last migration between HMP domains (in jiffies)*/
+	unsigned long		last_migration;
+
+	/* If set, don't touch for migration */
+	int			migrate_candidate;
+#endif
 	u64			exec_start;
 	u64			sum_exec_runtime;
 	u64			vruntime;

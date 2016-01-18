@@ -90,6 +90,16 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+#ifdef CONFIG_HPERF_HMP
+/* cpumask for A15 cpus */
+static DECLARE_BITMAP(cpu_fastest_bits, CONFIG_NR_CPUS);
+struct cpumask *cpu_fastest_mask = to_cpumask(cpu_fastest_bits);
+
+/* cpumask for A7 cpus */
+static DECLARE_BITMAP(cpu_slowest_bits, CONFIG_NR_CPUS);
+struct cpumask *cpu_slowest_mask = to_cpumask(cpu_slowest_bits);
+#endif
+
 DEFINE_MUTEX(sched_domains_mutex);
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
@@ -2107,6 +2117,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.prev_sum_exec_runtime	= 0;
 	p->se.nr_migrations		= 0;
 	p->se.vruntime			= 0;
+#ifdef CONFIG_HPERF_HMP
+	p->se.druntime			= 0;
+#endif
 	INIT_LIST_HEAD(&p->se.group_node);
 
 #ifdef CONFIG_SCHEDSTATS
@@ -6469,6 +6482,9 @@ sd_init(struct sched_domain_topology_level *tl, int cpu)
 					| 0*SD_PREFER_SIBLING
 					| 0*SD_NUMA
 					| sd_flags
+#ifdef CONFIG_HPERF_HMP
+					| (tl->flags & SD_HMP_BALANCE)
+#endif
 					,
 
 		.last_balance		= jiffies,
@@ -6531,7 +6547,11 @@ static struct sched_domain_topology_level default_topology[] = {
 #ifdef CONFIG_SCHED_MC
 	{ cpu_coregroup_mask, cpu_core_flags, SD_INIT_NAME(MC) },
 #endif
-	{ cpu_cpu_mask, SD_INIT_NAME(DIE) },
+	{ cpu_cpu_mask,
+#ifdef CONFIG_HPERF_HMP
+	 .flags = SD_HMP_BALANCE,
+#endif
+	 SD_INIT_NAME(DIE)},
 	{ NULL, },
 };
 
@@ -7024,6 +7044,45 @@ static int build_sched_domains(const struct cpumask *cpu_map,
 		sd = *per_cpu_ptr(d.sd, i);
 		cpu_attach_domain(sd, d.rd, i);
 	}
+
+#ifdef CONFIG_HPERF_HMP
+	for (i = nr_cpumask_bits - 1; i >= 0; i--) {
+		if (!cpumask_test_cpu(i, cpu_map))
+			continue;
+
+		for (sd = *per_cpu_ptr(d.sd, i); sd; sd = sd->parent) {
+			struct sched_group *sg;
+			sd->a7_group = NULL;
+			sd->a15_group = NULL;
+
+			/* Process only HMP domains */
+			if (!(sd->flags & SD_HMP_BALANCE))
+				continue;
+
+			/*
+			 * Process sched groups of this domain.
+			 * Attach sg to hmp domains.
+			 */
+			sg = sd->groups;
+			do {
+				if (!sg->sgc)
+					goto next_sg;
+#ifdef CONFIG_SCHED_DEBUG
+				printk(KERN_EMERG "Attaching CPUs 0x%08lX to domain %s\n",
+				       sched_group_cpus(sg)->bits[0], sd->name);
+#endif
+				if (cpumask_intersects(sched_group_cpus(sg),
+							cpu_fastest_mask))
+					sd->a15_group = sg;
+				else
+					sd->a7_group = sg;
+next_sg:
+				sg = sg->next;
+			} while (sg != sd->groups);
+		}
+	}
+#endif /* CONFIG_HPERF_HMP */
+
 	rcu_read_unlock();
 
 	ret = 0;
@@ -7492,6 +7551,10 @@ void __init sched_init(void)
 #endif
 		init_rq_hrtick(rq);
 		atomic_set(&rq->nr_iowait, 0);
+#ifdef CONFIG_HPERF_HMP
+		rq->druntime_sum = 0;
+		rq->nr_hmp_tasks = 0;
+#endif
 	}
 
 	set_load_weight(&init_task);
