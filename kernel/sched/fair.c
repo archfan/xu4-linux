@@ -5281,13 +5281,19 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 			new_cpu = cpu;
 	}
 
+
 	if (!sd) {
-		if (sd_flag & SD_BALANCE_WAKE) /* XXX always ? */
-			if (IS_ENABLED(CONFIG_HPERF_HMP) && sync)
-				new_cpu = prev_cpu;
-			else
-				new_cpu = select_idle_sibling(p, prev_cpu);
-	} else {
+                if (sd_flag & SD_BALANCE_WAKE) /* XXX always ? */
+               	{
+                        if (IS_ENABLED(CONFIG_HPERF_HMP) && sync)
+                                new_cpu = prev_cpu;
+                        else
+                                new_cpu = select_idle_sibling(p, prev_cpu);
+        	 }
+        }
+        else
+{
+
 #ifdef CONFIG_HPERF_HMP
 		new_cpu = hmp_select_task_rq_fair(p);
 #else
