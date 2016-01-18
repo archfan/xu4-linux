@@ -9638,7 +9638,7 @@ void show_numa_stats(struct task_struct *p, struct seq_file *m)
 #endif /* CONFIG_NUMA_BALANCING */
 #endif /* CONFIG_SCHED_DEBUG */
 
-#ifdef CONFIG_HPERF_HMP
+#ifdef CONFIG_HPERF_HMP /* FIXME: Assign correct HMP masks */
 static unsigned long default_fast_mask = 0x0F;
 static unsigned long default_slow_mask = 0xF0;
 
